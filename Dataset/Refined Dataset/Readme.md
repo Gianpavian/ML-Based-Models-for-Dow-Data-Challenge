@@ -1,1 +1,1 @@
-Refined Dataset is a dataset that have been praprocessed
+Refined Dataset merupakan set data yang telah diolah dengan metode prapemrosesan data.
