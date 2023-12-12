@@ -16,7 +16,10 @@ from sklearn.ensemble import GradientBoostingRegressor,AdaBoostRegressor,Bagging
 from sklearn.svm import SVR
 
 #Performance Model
-from sklearn.metrics import r2_score, mean_squared_error,
+from sklearn.metrics import r2_score, mean_squared_error
+
+#Noise Reduction
+from tsmoothie.smoother import *
 
 ##Loading the dataset
 
