@@ -1,1 +1,174 @@
+##Import package
 
+from google.colab import drive
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from sklearn.preprocessing import StandardScaler
+from matplotlib import gridspec
+
+#Performance metric
+from sklearn.metrics import mean_squared_error, r2_score
+
+#Model
+from tensorflow.keras.layers import Input,Dense,BatchNormalization, LSTM, GRU, SimpleRNN
+from tensorflow.keras.models import Model
+from tensorflow.keras.optimizers import Adam
+
+##Load Dataset
+df_train = pd.read_csv('drive/MyDrive/Project/Train.csv')  #Load Training dataset
+df_train = df_train.iloc[:,:].values                       #Converts the DataFrame to a NumPy array
+df_train = np.delete(df_train,0,axis=1)                    #Delete Time Feature
+
+df_test = pd.read_csv('drive/MyDrive/Project/Test.csv')    #Load Validating dataset
+df_test = df_test.iloc[:,:].values                         #Converts the DataFrame to a NumPy array
+df_test = np.delete(df_test,0,axis=1)                      #Delete Time Feature
+
+##Scaller
+
+sc = StandardScaler()
+df_train = sc.fit_transform(df_train)
+df_test = sc.transform(df_test)
+
+##Modifty the shape of train and test data
+
+T = 100
+D = df_train.shape[1]
+X = []
+Y = []
+
+for t in range(df_train.shape[0]-T):
+    x = df_train[t:t+T,:]
+    X.append(x)
+    y = df_train[t+T,-1]
+    Y.append(y)
+
+for t in range(df_test.shape[0]-T):
+    x = df_test[t:t+T,:]
+    X.append(x)
+    y = df_test[t+T,-1]
+    Y.append(y)
+
+##Generating X and Y
+
+X_train = np.array(X).reshape(df_train.shape[0]-T,T,D)
+Y_train = np.array(Y)
+X_test = np.array(X).reshape(df_test.shape[0]-T,T,D)
+Y_test = np.array(Y)
+
+##Training the Model
+
+#Set the Hyperparameter
+i = Input(shape=(T,D))
+x = LSTM(50)(i)
+x = Dense(units=1)(x)
+epoch = 50
+optimizer = Adam(0.0001)
+
+#Making and Training the Model
+model = Model(i,x)
+model.compile(loss='mse',optimizer=optimizer)
+history = model.fit(X_train, Y_train, validation_data=(X_test, Y_test), batch_size=32, epochs=epoch, verbose=1)    
+
+#Extract the resulted loss
+training_loss = history.history['loss']     #Extracts the training loss values from the history object and stores them in training_loss array
+test_loss = history.history['val_loss']     #Extracts the test loss values from the history object and stores them in test_loss array
+
+#Visualization of training and test loss
+fig1 = plt.figure(dpi=400)
+ax1 = fig1.add_axes([0,0,1,1])
+ax1.plot(np.arange(epoch),training_loss,'r--',label='Training Loss')
+ax1.plot(np.arange(epoch),test_loss,'b-',label='Test Loss')
+plt.ylim(-0.005, 0.40)
+ax1.legend()
+
+#Predict the test dataset
+y_pred = model.predict(X_train)
+y_test_pred = model.predict(X_test)
+
+##Re-Scaller
+
+y = X_train[:,99,9]
+zero = np.zeros((y.shape[0],9))
+y = sc.inverse_transform(np.concatenate([zero,y.reshape(-1,1)],axis=1))[:,-1]
+y_pred = sc.inverse_transform(np.concatenate([zero,y_pred.reshape(-1,1)],axis=1))[:,-1]
+
+y_test = X_test[:,99,9]
+zero = np.zeros((y_test.shape[0],9))
+y_test = sc.inverse_transform(np.concatenate([zero,y_test.reshape(-1,1)],axis=1))[:,-1]
+y_test_pred = sc.inverse_transform(np.concatenate([zero,y_test_pred.reshape(-1,1)],axis=1))[:,-1]
+
+##Calculating the Performance Matrices
+
+#R2
+R2 = r2_score(y_test, y_test_pred)
+
+#Q2
+PRESS = sum((y_test-y_test_pred)**2)
+TSS = sum((y_test-np.mean(y))**2)
+Q2 = 1 - (PRESS/TSS)
+
+##Visualization of the Result
+
+x_ax = range(len(y))
+x_ax1 = range(len(y_test))
+x_ax2 = range(8)
+
+#Create a figure
+fig = plt.figure(dpi=400)
+
+#Change the size of subplot's
+fig.set_figheight(10)
+fig.set_figwidth(20)
+
+#Create a grid for different subplots
+spec = gridspec.GridSpec(ncols=2, nrows=2,
+                         width_ratios=[3.5, 1], wspace=0.1,
+                         hspace=0.3, height_ratios=[1, 1])
+
+#ax0 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[0]"
+ax0 = fig.add_subplot(spec[0])
+ax0.scatter(x_ax, y, label="Actual",c='orange',alpha=0.9)
+ax0.plot(x_ax, y_pred, label="Predicted",c='blue',linewidth=2)
+plt.title("Train vs predicted data")
+plt.xlabel('Hour')
+plt.ylabel('Imputrity')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#ax1 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[1]"
+ax2 = fig.add_subplot(spec[1])
+ax2.scatter(y, y_pred, c='orange')
+ax2.plot(x_ax2, x_ax2, c='blue',linewidth=2,label="Diagonal Line")
+plt.title("y vs y predicted")
+plt.xlabel('Actual')
+plt.ylim(0, 7)
+plt.xlim(0, 7)
+plt.text(1, 5, '$R^2$ ='+ str(np.round(r2,4)))
+plt.ylabel('Predicted')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#ax2 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[2]"
+ax1 = fig.add_subplot(spec[2])
+ax1.scatter(x_ax1, y_test, label="Actual",c='orange',alpha=0.9)
+ax1.plot(x_ax1, y_test_pred, label="Predicted",c='blue',linewidth=2)
+plt.title("Train vs predicted data")
+plt.title("Test vs predicted data")
+plt.xlabel('Hour')
+plt.ylabel('Imputrity')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+
+#ax3 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[3]"
+ax3 = fig.add_subplot(spec[3])
+ax3.scatter(y_test, y_test_pred,c='orange')
+ax3.plot(x_ax2, x_ax2, c='blue',linewidth=2,label="Diagonal Line")
+plt.title("y test vs y test predicted")
+plt.xlabel('Actual')
+plt.ylim(0, 7)
+plt.xlim(0, 7)
+plt.text(1, 5, '$R^2$ ='+ str(np.round(r2_test,4)))
+plt.ylabel('Predicted')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#display the plots
+plt.show()
