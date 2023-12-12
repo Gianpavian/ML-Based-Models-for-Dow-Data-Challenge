@@ -1,2 +1,2 @@
-Merupakan set data yang digunakan untuk training dan validasi model. 
-Set data ini didapatkan dari modifikasi set data original dengan mengubah format timestamp pada set data menjadi hour(jam) dan menghilangkan non-numeric values seperti '!' dan 'inf'
+It is a dataset used for training and validating the model. 
+This dataset is obtained by modifying the original dataset by converting the timestamp format in the dataset to hours and removing non-numeric values such as '!' and 'inf'
