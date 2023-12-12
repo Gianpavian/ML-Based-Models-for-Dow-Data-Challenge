@@ -110,7 +110,7 @@ Q2_Best = Acc.loc[Acc['Q2'].idxmax(), 'Q2']
 ##Visualization of the best model result
 
 #Create a x-axis
-x_ax = range(len(y))
+x_ax = range(len(y_train))
 x_ax1 = range(len(y_test))
 x_ax2 = range(8)
 
@@ -137,7 +137,7 @@ plt.legend(loc='best',fancybox=True, shadow=True)
 
 #ax1 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[1]"
 ax2 = fig.add_subplot(spec[1])
-ax2.scatter(y, y_pred, c='orange')
+ax2.scatter(y_train, y_train_pred, c='orange')
 ax2.plot(x_ax2, x_ax2, c='blue',linewidth=2,label="Diagonal Line")
 plt.ylim(0, 7)
 plt.xlim(0, 7)
