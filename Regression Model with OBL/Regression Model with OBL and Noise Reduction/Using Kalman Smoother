@@ -1,1 +1,233 @@
+##Import package
 
+from google.colab import drive
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+from matplotlib import gridspec
+
+#Models
+from sklearn.linear_model import LinearRegression, LassoLars, PoissonRegressor, LassoLarsCV
+from sklearn.cross_decomposition import PLSRegression
+from sklearn.tree import DecisionTreeRegressor
+from sklearn.neighbors import KNeighborsRegressor
+from sklearn.neural_network import MLPRegressor
+from sklearn.ensemble import GradientBoostingRegressor,AdaBoostRegressor,BaggingRegressor, RandomForestRegressor, ExtraTreesRegressor
+from sklearn.svm import SVR
+
+#Performance Model
+from sklearn.metrics import r2_score, mean_squared_error,
+
+##Loading the dataset
+
+drive.mount('/content/drive') #Mount Google Drive to the Colab notebook environment in order to access the data
+df = pd.read_csv('drive/MyDrive/Project/Train.csv') #Load Train Dataset
+df_test = pd.read_csv('drive/MyDrive/Project/Test.csv') #Load Validating Dataset
+
+##Generating X And Y
+
+X_train = df_train.iloc[:,0:-3]
+X_test = df_test.iloc[:,0:-3]
+y_train = df_train.iloc[:,-1].to_numpy()
+y_test = df_test.iloc[:,-1].to_numpy()
+
+##Noise Reduction
+
+#Operate smoothing for the Training dataset
+kalman = KalmanSmoother(component='level_trend',component_noise={'level':0.001, 'trend':0})
+kalman.smooth(y_train)
+y_train = kalman.smooth_data[0] #Update the y_train data
+
+#Operate smoothing for the validating dataset
+kalman = KalmanSmoother(component='level_trend',component_noise={'level':0.001, 'trend':0})
+kalman.smooth(y_test)
+y_test = kalman.smooth_data[0] #Update the y_train data
+
+##Training the Model
+
+#Creating an array of regressor
+regressors = [['SVR',SVR()],
+              ['DecisionTreeRegressor',DecisionTreeRegressor()],
+              ['KNeighborsRegressor', KNeighborsRegressor()],
+              ['RandomForestRegressor', RandomForestRegressor()],
+              ['MLPRegressor',MLPRegressor()],
+              ['AdaBoostRegressor',AdaBoostRegressor()],
+              ['GradientBoostingRegressor',GradientBoostingRegressor()],
+              ['ExtraTreesRegressor',ExtraTreesRegressor()],
+              ['BaggingRegressor',BaggingRegressor()],
+              ['LinearRegression',LinearRegression()],
+              ['LassoLars',LassoLars()],
+              ['PoissonRegressor',PoissonRegressor()],
+              ['PLSRegression',PLSRegression()],
+              ['LassoLarsCV',LassoLarsCV()]]
+
+#Creating an empty Pandas DataFrame for storing the performance result of each models
+Acc = pd.DataFrame()
+
+#Training process
+for mod in regressors:
+    name = mod[0]
+    model = mod[1]
+
+    #Save model
+    model.fit(X_train, y_train)
+    pickle.dump(model, open(str(name)+'.pkl', 'wb'))
+
+    #Load model
+    pickled_model = pickle.load(open('/content/'+str(name)+'.pkl', 'rb'))
+    y_train_pred = pickled_model.predict(X_train)
+    y_test_pred = pickled_model.predict(X_test)
+
+    #Obtained the optimize K function
+    def function (K): #declares a function
+        y_train_pred_new = np.zeros(len(y_train_pred))          #Creating an Array for storing updated y_train_pred data
+        D = np.zeros(len(y_train_pred))                         #Creating an Array for storing the drift
+        y_train_pred_new[0] = y_train_pred[0]                   #Initial value of y_train_pred data
+        D[0] = 0.0                                              #Initial drift
+ 
+        #Generating new y_train_pred
+        for i in range (len(y_train_pred)-1):
+            y_train_pred_new[i]= y_train_pred[i] + D[i]
+            D[i+1]= D[i]+ K*(y_train[i]-y_train_pred_new[I])
+        
+        #Calculating MSE of new y_train_pred data
+        MSE = mean_squared_error(y_train, y_train_pred_new)
+        return MSE    
+   
+    pt = rd.random()                                                                            #Creating a random number
+    b = (0.01,0.999)
+    bnds = b                                                                                    #Creating a bound to K value
+    result = minimize(function, pt, method='Nelder-Mead', bounds=Bounds(0.0,1.0), tol=1e-9)     #Optimized the K function, so it get minimum MSE value
+    K = result['x']                                                                             #extract the K value
+
+    #Implementing OBL method on Training data
+    y_train_pred_new = np.zeros(len(y_train_pred))              #Creating an Array for storing updated y_train_pred data
+    D = np.zeros(len(y_train_pred))                             #Creating an Array for storing the drift
+    y_train_pred_new[0] = y_train_pred[0]                       #Initial value of y_train_pred data
+    D[0] = 0.0                                                  #Initial drift
+
+    for i in range (len(y_train_pred)-1):                       #Generating new y_train_pred
+        y_train_pred_new[i]= y_train_pred[i] + D[i]
+        D[i+1]= D[i]+ K*(y_train[i]-y_train_pred_new[I])
+
+    #Implementing OBL method on Validating data
+    y_test_pred_new = np.zeros(len(y_test_pred))                #Creating an Array for storing updated y_test_pred data
+    D_test = np.zeros(len(y_test_pred), dtype = float)          #Creating an Array for storing the drift
+    y_test_pred_new[0] = y_test_pred[0]                         #Initial value of y_test_pred data
+    D_test[0] = 0.0                                             #Initial drift
+
+    for i in range (len(y_test_pred)-1):                        #Generating new y_test_pred
+      y_test_pred_new[i]= y_test_pred[i] + D_test[i]
+      D_test[i+1]= D_test[i]+ K*(y_test[i]-y_test_pred_new[i])
+
+    #R2 Score Calculation
+    R2 = r2_score(y_test, y_test_pred_new)
+    
+    #Q2 Score Calculation
+    y_test_pred = np.reshape(y_test_pred_new, (4948,))
+    PRESS = sum((y_test-y_test_pred_new)**2)
+    TSS = sum((y_test-np.mean(y))**2)
+    Q2 = 1 - (PRESS/np.array(TSS))
+
+    Acc = Acc.append(pd.Series({'Model':name,'R2':R2,'Q2':Q2, 'K':K[0]}), ignore_index=True)
+
+#Sort the DataFrame based on the Q2 values
+Acc.sort_values(by='Q2',ascending=False, ignore_index=True)
+
+##Result of the Best Model
+
+#Selecting the best model
+Best = Acc.loc[Acc['Q2'].idxmax(), 'name']
+
+#Load the best model
+Best_model = pickle.load(open('/content/'+str(Bestl)+'.pkl', 'rb'))
+y_train_pred = pickled_model.predict(X_train)
+y_test_pred = pickled_model.predict(X_test)
+R2_Best = Acc.loc[Acc['Q2'].idxmax(), 'R2']
+Q2_Best = Acc.loc[Acc['Q2'].idxmax(), 'Q2']
+K_Best = Acc.loc[Acc['Q2'].idxmax(), 'K']
+
+#Re-apply the OBL method
+y_train_pred_new = np.zeros(len(y_train_pred))              #Creating an Array for storing updated y_train_pred data
+D = np.zeros(len(y_train_pred))                             #Creating an Array for storing the drift
+y_train_pred_new[0] = y_train_pred[0]                       #Initial value of y_train_pred data
+D[0] = 0.0                                                  #Initial drift
+
+for i in range (len(y_train_pred)-1):                       #Generating new y_train_pred
+    y_train_pred_new[i]= y_train_pred[i] + D[i]
+    D[i+1]= D[i]+ K*(y_train[i]-y_train_pred_new[I])
+
+y_test_pred_new = np.zeros(len(y_test_pred))                #Creating an Array for storing updated y_test_pred data
+D_test = np.zeros(len(y_test_pred), dtype = float)          #Creating an Array for storing the drift
+y_test_pred_new[0] = y_test_pred[0]                         #Initial value of y_test_pred data
+D_test[0] = 0.0                                             #Initial drift
+
+for i in range (len(y_test_pred)-1):                        #Generating new y_test_pred
+    y_test_pred_new[i]= y_test_pred[i] + D_test[i]
+    D_test[i+1]= D_test[i]+ K*(y_test[i]-y_test_pred_new[i])
+
+##Visualization of the best model result
+
+#Create a x-axis
+x_ax = range(len(y_train))
+x_ax1 = range(len(y_test))
+x_ax2 = range(8)
+
+#Create a figure
+fig = plt.figure(dpi=400)
+
+#Change the size of the subplot's
+fig.set_figheight(10)
+fig.set_figwidth(20)
+
+#Create a grid for different subplots
+spec = gridspec.GridSpec(ncols=2, nrows=2,
+                         width_ratios=[3.5, 1], wspace=0.1,
+                         hspace=0.3, height_ratios=[1, 1])
+
+#ax0 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[0]"
+ax0 = fig.add_subplot(spec[0])
+ax0.scatter(x_ax, y_train, label="Actual",c='orange',alpha=0.9)
+ax0.plot(x_ax, y_train_pred_new, label="Predicted",c='blue',linewidth=2)
+plt.title("Train vs predicted data")
+plt.xlabel('Hour')
+plt.ylabel('Imputrity')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#ax1 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[1]"
+ax2 = fig.add_subplot(spec[1])
+ax2.scatter(y_train, y_train_pred_new, c='orange')
+ax2.plot(x_ax2, x_ax2, c='blue',linewidth=2,label="Diagonal Line")
+plt.ylim(0, 7)
+plt.xlim(0, 7)
+plt.title("y vs y predicted")
+plt.xlabel('Actual')
+plt.text(1, 5, '$R^2$ ='+ str(np.round(R2_Best,4)))
+plt.ylabel('Predicted')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#ax2 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[2]"
+ax1 = fig.add_subplot(spec[2])
+ax1.scatter(x_ax1, y_test, label="Actual",c='orange',alpha=0.9)
+ax1.plot(x_ax1, y_test_pred_new, label="Predicted",c='blue',linewidth=2)
+plt.title("Train vs predicted data")
+plt.title("Test vs predicted data")
+plt.xlabel('Hour')
+plt.ylabel('Imputrity')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#ax3 will take 0th position in geometry(Grid we created for subplots), as we defined the position as "spec[3]"
+ax3 = fig.add_subplot(spec[3])
+ax3.scatter(y_test, y_test_pred_new,c='orange')
+ax3.plot(x_ax2, x_ax2, c='blue',linewidth=2,label="Diagonal Line")
+plt.ylim(0, 7)
+plt.xlim(0, 7)
+plt.title("y test vs y test predicted")
+plt.xlabel('Actual')
+plt.text(1, 5, '$Q^2$ ='+ str(np.round(Q2_Best,4)))
+plt.ylabel('Predicted')
+plt.legend(loc='best',fancybox=True, shadow=True)
+
+#Save and display the plots
+plt.savefig(fname="saved_image.png", dpi=400, format='png')
+plt.show()
