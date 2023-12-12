@@ -24,7 +24,7 @@ df_test = df_test[(np.abs(stats.zscore(df_test)) < 3).all(axis=1)]
 
 ##Generating X And Y
 #Generating Y in train dataset
-y = df.iloc[:,-3].to_numpy() #extracts the values from the third-to-last column of the DataFrame df and stores them in a NumPy array "y"
+y = df.iloc[:,-3] #extracts the values from the third-to-last column of the DataFrame df
 
 #generating X in train dataset
 X = df.iloc[:,0:-3] #selects a subset of the DataFrame df by taking all rows and excluding the last three columns
@@ -32,7 +32,7 @@ X_n = df.iloc[:,-2:,]  #extracts the values from the last two columns
 X = X.join(X_n) #Merge X_n with X
 
 #Generating Y in validating dataset
-y_test = df_test.iloc[:,-3].to_numpy() #extracts the values from the third-to-last column of the DataFrame df and stores them in a NumPy array "y"
+y_test = df_test.iloc[:,-3] #extracts the values from the third-to-last column of the DataFrame
 
 #generating X in validating dataset
 X_test = df_test.iloc[:,0:-3] #selects a subset of the DataFrame df by taking all rows and excluding the last three columns
@@ -48,8 +48,9 @@ X_fs = fs.transform(X) #generating feature selected X data by transforming featu
 X_test_fs = fs.transform(X_test) #generating feature selected X_test data by transforming feature matrix to keep only the selected features
 
 ##Save the refined dataset
-np.savetxt("X_Train.csv", X_fs, delimiter=",")
-np.savetxt("X_Test.csv", X_test_fs, delimiter=",")
-np.savetxt("y_Train.csv", y, delimiter=",")
-np.savetxt("y_Test.csv", y_test, delimiter=",")
+Train = X_fs.join(y) #Merge X_fs with y
+Test = X_test_fs.join(y_test) #Merge X_test_fs with y_test
+
+np.savetxt("Train.csv", Train, delimiter=",")
+np.savetxt("Test.csv", Test, delimiter=",")
 
